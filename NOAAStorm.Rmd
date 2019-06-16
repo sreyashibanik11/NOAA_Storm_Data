@@ -1,0 +1,365 @@
+---
+title: 'Exploring the NOAA Storm Database : Health and Economic impacts of Severe
+  Weather Events in the U.S.'
+author: "Sreyashi Banik"
+date: "6 June 2019"
+output: html_document
+---
+
+## **Assignment**
+	
+	The basic goal of this assignment is to explore the NOAA Storm Database and answer the following basic questions about severe weather events.
+	
+	* Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+	* Across the United States, which types of events have the greatest economic consequences?
+
+## **Synopsis**
+
+  Storms and other severe weather events can cause both public health and economic problems for communities and municipalities.
+  
+  This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+This analysis shows by aggregating the data by storm events type:
+
++	**Tornados** are the most harmful events on population health (including injury and fatalities) as well as are responsible for the most economic damage.
+
+## **Data Processing**
+
+### **Loading libraries**
+
+I have used these libraries in my analysis:
+
+```{r,warning=FALSE,message=FALSE}
+
+library(dplyr)
+library(RColorBrewer)
+
+```
+
+### **Data**
+
+The data for this assignment come in the form of a comma-separated-value file compressed via the bzip2 algorithm to reduce its size. You can download the file from the course web site:
+
+[Storm Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)[47Mb]
+
+There is also some documentation of the database available. Here you will find how some of the variables are constructed / defined.  
+
+* National Weather Service [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)  
+
+* National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.  
+
+### **Downloading the data**
+
+First the data have been downloaded from the website(if it has not been downloaded already):
+
+```{r,warning=FALSE}
+
+if (!file.exists("Strom_Data.csv.bz2")){
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2",destfile ="C://Users//User//Documents//Strom_Data.csv.bz2" )
+}
+
+```
+
+### **Loading the data**
+
+Then the downloaded data is loaded on R using the read.csv command. If object it is already loaded, then the cached object is used insted of loading it each time the Rmd file is knitted.
+
+```{r,cache=TRUE,warning=FALSE}
+
+StromData<-read.csv(bzfile("Strom_Data.csv.bz2"),header = TRUE)
+
+```
+
+### **Examining The dimension of the data**
+
+In the data.frame StromData, there are 37 columns (variables) and 414626 rows (observations).
+
+```{r}
+
+dim(StromData)
+
+```
+
+
+### **Extracting required variables for analysis of weather impact on health and economy**
+
+From a list of variables in StromData, these are columns of interest:  
+
+Health variables:  
+* FATALITIES: approx. number of deaths  
+* INJURIES: approx. number of injuries  
+
+Economic variables:  
+
+* PROPDMG: approx. property damages  
+* PROPDMGEXP: the units for property damage value  
+* CROPDMG: approx. crop damages  
+* CROPDMGEXP: the units for crop damage value  
+
+Events - target variable:  
+
+* EVTYPE: weather event (Tornados, Wind, Snow, Flood, etc..)  
+
+Extract variables of interest from original data set:  
+
+```{r,cache=TRUE}
+
+StromData<-select(StromData,EVTYPE,FATALITIES:CROPDMGEXP)
+
+```
+
+### **Examining few Rows (Observations) of the new data.frame**
+
+Check the first few rows in data set:
+
+```{r}
+
+head(StromData)
+
+```
+
+### **Examining the structure of the new data.frame**
+
+Check inner structure of the data set:
+
+```{r}
+
+str(StromData)
+
+```
+
+### **Transforming Event Type Variable**
+
+Let's check the top 10 event types that appears most frequently in the rows(observations):
+
+```{r}
+
+sort(table(StromData$EVTYPE), decreasing = TRUE)[1:10]
+
+```
+
+We will group events like TUNDERSTORM WIND, TUNDERSTORM WINDS, TSTM WIND etc. into one event "Thunderstorm Wind".We will transform the other events in a similar way.
+The events that was not categorized by any specific type of events are grouped into a new event named "Others".
+
+```{r}
+
+# Copying actual data.frame
+TEMP<-StromData
+
+# Creating a new variable(column) "EVNAME" and assigning "Others" as it's default value
+TEMP$EVNAME<-"Others"
+
+# Grouping events by similar type of keywords
+TEMP$EVNAME[grep("AVALANCE|AVALANCHE",TEMP$EVTYPE,ignore.case = TRUE)]<-"Avalanche"
+TEMP$EVNAME[grep("BLIZZARD",TEMP$EVTYPE,ignore.case = TRUE)]<-"Blizzard"
+TEMP$EVNAME[grep("FLOOD|FLOODING|FLOOODING|FLOODS|EXCESSIVE RAIN|EXCESSIVE PRECIPITATION|HEAVY RAIN|HEAVY PRECIPITATION|HEAVY PRECIPATATION|RAIN|HEAVY SHOWER",TEMP$EVTYPE,ignore.case = TRUE)]<-"Flood and Heavy Rain"
+TEMP$EVNAME[grep("COASTAL|BEACH|TIDAL FLOOD|EROSION|HIGH SEA|HIGH SURF|HEAVY SURF|HEAVY SWELLS|HIGH  SWELLS|STROM SURGE|HIGH SWELLS|TIDE",TEMP$EVTYPE,ignore.case = TRUE)]<-"Coastal Flood and Strom"
+TEMP$EVNAME[grep("COLD|WIND CHILL|WINDCHILL",TEMP$EVTYPE,ignore.case = TRUE)]<-"Cold and Wind Chill"
+TEMP$EVNAME[grep("BELOW NORMAL PRECIPITATION|DROUGHT|DRY|EXCESSIVE HEAT|EXCESSIVELY DRY|EXTREME HEAT|HEAT",TEMP$EVTYPE,ignore.case = TRUE)]<-"Drought and Heat"
+TEMP$EVNAME[grep("Dust",TEMP$EVTYPE,ignore.case = TRUE)]<-"Dust Devil and Dust Storm"
+TEMP$EVNAME[grep("FOG",TEMP$EVTYPE,ignore.case = TRUE)]<-"Fog"
+TEMP$EVNAME[grep("FROST|FREEZE|FREEZING",TEMP$EVTYPE,ignore.case = TRUE)]<-"Frost and Freeze"
+TEMP$EVNAME[grep("FUNNEL|WATERSPOUT|WAYTERSPOUT|WATER SPOUT",TEMP$EVTYPE,ignore.case = TRUE)]<-"Funnel Cloud and Waterspout"
+TEMP$EVNAME[grep("HAIL",TEMP$EVTYPE,ignore.case = TRUE)]<-"Hail"
+TEMP$EVNAME[grep("HIGH W|HIGH WIND|WIND",TEMP$EVTYPE,ignore.case = TRUE)]<-"High Wind"
+TEMP$EVNAME[grep("HURRICANE|TYPHOON",TEMP$EVTYPE,ignore.case = TRUE)]<-"Hurricane and Typhoon"
+TEMP$EVNAME[grep("LAKE|SEICHE",TEMP$EVTYPE,ignore.case = TRUE)]<-"Lake Effect Snow, Lake Flood and Seiche"
+TEMP$EVNAME[grep("LIGHTING|LIGHTNING|LIGNTNING",TEMP$EVTYPE,ignore.case = TRUE)]<-"Lightning"
+TEMP$EVNAME[grep("RIP CURRENT|GRADIENT WIND",TEMP$EVTYPE,ignore.case = TRUE)]<-"Rip Current and Gradient Wind"
+TEMP$EVNAME[grep("SNOW|ICE|SLEET",TEMP$EVTYPE,ignore.case = TRUE)]<-"Snow, Ice and Sleet"
+TEMP$EVNAME[grep("STRONG WIND",TEMP$EVTYPE,ignore.case = TRUE)]<-"Strong Wind"
+TEMP$EVNAME[grep("THUNDERSTORM W|THUNDERSTORM WIND|THUNDERSTORMW|THUNDERSTROM WIND|THUNDERTORM WINDS|THUNDERTSORM WIND|THUNDESTORM WIND|THUNERSTORM WIND|TSTM WIND|TUNDERSTORM WIND|TSTM|GUSTNADO|GUSTY",TEMP$EVTYPE,ignore.case = TRUE)]<-"Thunderstorm Wind"
+TEMP$EVNAME[grep("TORNADO|TORNDAO",TEMP$EVTYPE,ignore.case = TRUE)]<-"Tornado"
+TEMP$EVNAME[grep("TROPICAL",TEMP$EVTYPE,ignore.case = TRUE)]<-"Tropical Depression and Storm"
+TEMP$EVNAME[grep("VOG,VOLCANIC",TEMP$EVTYPE,ignore.case = TRUE)]<-"Volcanic Eruption"
+TEMP$EVNAME[grep("WILDFIRE|WILD FIRES|FOREST FIRE|FIRE",TEMP$EVTYPE,ignore.case = TRUE)]<-"Wildfire"
+TEMP$EVNAME[grep("WINTER|WINTRY|WINTERY",TEMP$EVTYPE,ignore.case = TRUE)]<-"Winter Weather and Strom"
+
+# Listing all events in "EVNAME"
+sort(unique(TEMP$EVNAME))
+
+```
+
+So, there are total 24 different type of events in the new data.frame.
+
+Let's take a look at damage exponents:
+
+```{r}
+
+sort(unique(TEMP$PROPDMGEXP))
+sort(unique(TEMP$CROPDMGEXP))
+
+```
+
+So we can see there are 10 different valid exponents, they are:
+0, 1,2 or H or h, 3 or K OR k, 4, 5, 6 or M or m, 7, 8 and B
+
+Now we have to multiply the exponent parts with damage value to get total property damage.
+
+```{r}
+
+# Setting default value 0 to total property damage variable
+TEMP$TOTALPROPDMG=0
+
+# Multiplying exponent and value part to get total property damage
+TEMP$TOTALPROPDMG[grep("0",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("0",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^0
+TEMP$TOTALPROPDMG[grep("1",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("1",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^1
+TEMP$TOTALPROPDMG[grep("H|2",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("H|2",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^2
+TEMP$TOTALPROPDMG[grep("K|3",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("K|3",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^3
+TEMP$TOTALPROPDMG[grep("4",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("4",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^4
+TEMP$TOTALPROPDMG[grep("5",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("5",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^5
+TEMP$TOTALPROPDMG[grep("M|6",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("M|6",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^6
+TEMP$TOTALPROPDMG[grep("7",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("7",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^7
+TEMP$TOTALPROPDMG[grep("8",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("8",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^8
+TEMP$TOTALPROPDMG[grep("B",TEMP$PROPDMGEXP,ignore.case = TRUE)]<-TEMP$PROPDMG[grep("B",TEMP$PROPDMGEXP,ignore.case = TRUE)]*10^9
+
+# Checking Total property damage for first few observations
+head(TEMP$TOTALPROPDMG)
+
+```
+
+Similarly we will calculate total crop damage:
+
+```{r}
+
+# Setting default value 0 to total crop damage variable
+TEMP$TOTALCROPDMG=0
+
+# Multiplying exponent and value part to get total crop damage
+TEMP$TOTALCROPDMG[grep("0",TEMP$CROPDMGEXP,ignore.case = TRUE)]<-TEMP$CROPDMG[grep("0",TEMP$CROPDMGEXP,ignore.case = TRUE)]*10^0
+TEMP$TOTALCROPDMG[grep("2",TEMP$CROPDMGEXP,ignore.case = TRUE)]<-TEMP$CROPDMG[grep("2",TEMP$CROPDMGEXP,ignore.case = TRUE)]*10^2
+TEMP$TOTALCROPDMG[grep("K",TEMP$CROPDMGEXP,ignore.case = TRUE)]<-TEMP$CROPDMG[grep("K",TEMP$CROPDMGEXP,ignore.case = TRUE)]*10^3
+TEMP$TOTALCROPDMG[grep("M",TEMP$CROPDMGEXP,ignore.case = TRUE)]<-TEMP$CROPDMG[grep("M",TEMP$CROPDMGEXP,ignore.case = TRUE)]*10^6
+TEMP$TOTALCROPDMG[grep("B",TEMP$CROPDMGEXP,ignore.case = TRUE)]<-TEMP$CROPDMG[grep("B",TEMP$CROPDMGEXP,ignore.case = TRUE)]*10^9
+
+# Checking Total crop damage for first few observations
+head(TEMP$TOTALCROPDMG)
+
+```
+
+
+## **Analysis**
+
+Let's see which event caused most number of injuries. We will aggregate total number of injuries by Events.
+
+```{r}
+
+injuries <- aggregate(INJURIES ~ EVNAME, data=TEMP, sum)
+injuries <- injuries[order(-injuries$INJURIES), ]
+injuries
+
+```
+
+So **Tornado** caused more number of injuries than other events, followed by 
+**Flood and Heavy Rain** and **Thunderstorm Wind** respectively.
+
+Now find out which event caused most number of fatalities.
+
+```{r}
+
+fatalities <- aggregate(FATALITIES ~ EVNAME, data=TEMP, sum)
+fatalities <- fatalities[order(-fatalities$FATALITIES), ]
+fatalities
+
+```
+
+Most fatalities were caused due by **Tornado** , followed by **Drought and Heat** and **Flood and Heavy Rain** respectively.
+
+Now we are going to look at events that caused most property damage.
+
+```{r}
+
+propertydamage<-aggregate(TOTALPROPDMG~EVNAME,data =TEMP,sum)
+propertydamage<-propertydamage[order(-propertydamage$TOTALPROPDMG),]
+propertydamage
+
+```
+
+Most harmful events causing highest property damage is **Tornado**, **Flood and Heavy Rain** is close second followed by **Hurricane and Typhoon**.
+
+```{r}
+
+cropdamage<-aggregate(TOTALCROPDMG~EVNAME,data =TEMP,sum)
+cropdamage<-cropdamage[order(-cropdamage$TOTALCROPDMG),]
+cropdamage
+
+```
+
+**Flood and Heavy Rain** have caused most crop damage followed by **Drought and Heat** and **Snow, Ice and Sleet**.
+
+## **Results**
+
+**Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health ?**
+
+First, We will plot a piechart for 5 most deadliest event causing injuries:
+
+```{r}
+
+# Pick top 5 events causing most injuries
+injuries<-data.frame(injuries)
+injuries<-injuries[order(injuries$INJURIES,decreasing = TRUE),][1:5,]
+
+# Plotting a pie-chart
+pie(injuries$INJURIES ,labels =injuries$EVNAME , edges = 200, radius = 1.0, angle = 90, col =brewer.pal(10,"PiYG") ,main = "Plot: Top 5 Severe Events Causing Injuries")
+
+```
+
+Top 5 events causing most injuries are as follows:
+
+* 1.**Tornado**
+* 2.**Flood and Heavy Rain**
+* 3.**Thunderstorm Wind**
+* 4.**Drought and Heat**
+* 5.**Snow, Ice and Sleet**
+
+Now, We will plot a piechart for 5 most deadliest event causing fatalities:
+
+```{r}
+
+# Pick top 5 events causing most fatalities
+fatalities<-data.frame(fatalities)
+fatalities<-fatalities[order(fatalities$FATALITIES,decreasing = TRUE),][1:5,]
+
+# Plotting a pie-chart
+pie(fatalities$FATALITIES ,labels =fatalities$EVNAME , edges = 200, radius = 1.0, angle = 90, col =brewer.pal(10,"PRGn") ,main = "Plot: Top 5 Severe Events Causing Fatalities")
+
+```
+
+Top 5 events causing most fatalities are as follows:
+
+* 1.**Tornado**
+* 2.**Drought and Heat**
+* 3.**Flood and Heavy Rain**
+* 4.**Thunderstorm Wind**
+* 5.**Lightning**
+
+**Across the United States, which types of events have the greatest economic consequences?**
+
+We will calculate the sum of property damage and crop damage by event type. And then we will plot the damage.
+
+```{r}
+
+# Aggregating property damage and crop damage by event type
+damage<-aggregate(TOTALPROPDMG+TOTALCROPDMG~EVNAME,data =TEMP,sum)
+names(damage)<-c("EVNAME", "TOTALDAMAGE")
+
+# Pick top 5 events causing most damage
+damage<-data.frame(damage)
+damage<-damage[order(damage$TOTALDAMAGE,decreasing = TRUE),][1:5,]
+damage
+
+# Plotting a pie-chart
+
+ pie(damage$TOTALDAMAGE ,labels =damage$EVNAME , edges = 200, radius = 1.0, angle = 90, col =brewer.pal(10,"BrBG") ,main = "Plot: Top 5 Severe Events Causing Greatest Economic Consequences")
+
+```
+
+Top 5 events causing most economical damage are as follows:
+
+* 1.**Tornado**
+* 2.**Flood and Heavy Rain**
+* 3.**Hurricane and Typhoon**
+* 4.**Drought and Heat**
+* 5.**Snow, Ice and Sleet**
